@@ -14,11 +14,11 @@ if [ "$EUID" -ne 0 ]; then
 	exit
 fi
 
-echo "${green}[+] Installing a few dependencies (Apache2, PHP 5, Git, etc.) for ThrowbackLP."
+echo "${green}[+] Installing a few dependencies (Apache2, PHP 7.2, Git, etc.) for ThrowbackLP."
 echo "[+] This could take a while...${end}"
 
-apt-get update > /dev/null
-apt-get -y install zip ntp git apt-utils dialog apache2 php5 php5-mysql &> /dev/null
+apt update > /dev/null
+apt -y install zip ntp git apt-utils dialog apache2 php7.2 php7.2-mysql &> /dev/null
 
 while true; do
 	read -p "${red}[+] Would you like to enable SSL? (y/n)${end} " yn
@@ -139,18 +139,29 @@ while true; do
 		break
 	fi
 done
+#TBDIR=./ThrowbackLP
+#SQLSCRIPT=throwbackcp.sql
+#DBNAME=throwbackcp
+#GITURL=https://github.com/silentbreaksec/ThrowbackLP.git
+#DBUSER=tblp
 
 if [ "$primarylp" = true ] ; then
-	
+
+	cat >/tmp/mysql.conf <<- EOF
+		[client]
+		user=root
+		password=$mysqlpw1
+	EOF
+
 	echo "${green}[+] Installing MySQL server.${end}"
-	apt-get --reinstall install bsdutils &> /dev/null
+	apt --reinstall install bsdutils &> /dev/null
 	debconf-set-selections <<< 'mysql-server mysql-server/root_password password '$mysqlpw1
 	debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password '$mysqlpw1
-	apt-get -y install mysql-server &> /dev/null
+	apt -y install mysql-server &> /dev/null
 
 	echo "${green}[+] Installing SQL database and tables.${end}"
-	mysql -u root -p$mysqlpw1 -e "create database "$DBNAME";"
-	mysql -u root -p$mysqlpw1 $DBNAME < $TBDIR/$SQLSCRIPT
+	mysql --defaults-extra-file=/tmp/mysql.conf -e "create database "$DBNAME";"
+	mysql --defaults-extra-file=/tmp/mysql.conf $DBNAME < $TBDIR/$SQLSCRIPT
 	
 	echo '${green}[+] Generating random password for the ThrowbackLP database user.'
 	echo "[+] Note that you'll need these credentials if connecting other ThrowbackLPs to this primary LP.${end}"
@@ -169,9 +180,9 @@ if [ "$primarylp" = true ] ; then
 	sed -i 's/public static \$user.*/public static \$user = "'$DBUSER'";/g' $TBDIR/index.php
 	sed -i 's/public static \$dbName.*/public static \$dbName = "'$DBNAME'";/g' $TBDIR/index.php
 
-	mysql -uroot -p$mysqlpw1 $DBNAME -e "GRANT ALL ON throwbackcp.* to tblp@localhost IDENTIFIED BY '${tblppw}'";
-	mysql -uroot -p$mysqlpw1 $DBNAME -e "GRANT ALL ON throwbackcp.* to tblp@'%' IDENTIFIED BY '${tblppw}'"; 
-	mysql -uroot -p$mysqlpw1 $DBNAME -e "FLUSH PRIVILEGES;"
+	mysql --defaults-extra-file=/tmp/mysql.conf $DBNAME -e "GRANT ALL ON throwbackcp.* to tblp@localhost IDENTIFIED BY '${tblppw}'";
+	mysql --defaults-extra-file=/tmp/mysql.conf $DBNAME -e "GRANT ALL ON throwbackcp.* to tblp@'%' IDENTIFIED BY '${tblppw}'"; 
+	mysql --defaults-extra-file=/tmp/mysql.conf $DBNAME -e "FLUSH PRIVILEGES;"
 
 	while true; do
 		read -p "${red}[+] Would you like to create a user for the Throwback Control Panel? (y/n)${end} " yn
@@ -192,7 +203,8 @@ if [ "$primarylp" = true ] ; then
 				fi
 			done
 			
-			mysql -uroot -p$mysqlpw1 $DBNAME -e "INSERT INTO \`users\` (\`id\`, \`username\`, \`password\`, \`lastlogin\`) VALUES (0, '${user}', SHA1('${pass}'), '0');"
+			mysql --defaults-extra-file=/tmp/mysql.conf $DBNAME -e "INSERT INTO \`users\` (\`id\`, \`username\`, \`password\`, \`lastlogin\`) VALUES (0, '${user}', SHA1('${pass}'), '0');"
+			break
 
 		elif [ "${yn}" == "n" ] || [ "${yn}" == "N" ]; then
 			break
@@ -255,11 +267,11 @@ if [ "$installmsf" == true ]; then
 	echo "${red}[+] Ok, but don't say we didn't warn you!${end}"
 	
 	echo "${green}[+] Installing kernel headers.${end}"
-	apt-get -y install gcc make linux-headers-$(uname -r) > /dev/null
+	apt -y install gcc make linux-headers-$(uname -r) > /dev/null
 	ln -s /usr/src/linux-headers-$(uname -r)/include/generated/uapi/linux/version.h /usr/src/linux-headers-$(uname -r)/include/linux/
 
 	echo "${green}[+] Installing additional dependencies.${end}"
-	apt-get -y install php5-dev php-pear build-essential > /dev/null
+	apt -y install php7.2-dev php-pear build-essential > /dev/null
 
 	echo "${green}[+] Installing and configuring MsgPack for PHP. ${end}${red}Watch for any errors!${end}"
 	#pecl install channel://pecl.php.net/msgpack-0.5.5
@@ -272,10 +284,10 @@ if [ "$installmsf" == true ]; then
 	cd .. > /dev/null
 	rm -rf msgpack-0.5.7 > /dev/null
 
-	echo "extension=msgpack.so" >> /etc/php5/apache2/php.ini
+	echo "extension=msgpack.so" >> /etc/php7.2/apache2/php.ini
 	
 	echo "${green}[+] Installing the last few dependencies.${end}"
-	apt-get -y install curl libcurl3 libcurl3-dev php5-curl &> /dev/null
+	apt -y install curl libcurl3 libcurl3-dev php7.2-curl &> /dev/null
 
 	machinetype=`uname -m`
 	cd /tmp/
